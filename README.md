@@ -81,7 +81,6 @@ python -m src.inference --code "query = 'SELECT * WHERE id=' + uid"
 python -m src.inference --file vulnerable_code.c --model graphcodebert
 ```
 
-```
 
 ## 🔬 Models
 
