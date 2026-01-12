@@ -81,19 +81,6 @@ python -m src.inference --code "query = 'SELECT * WHERE id=' + uid"
 python -m src.inference --file vulnerable_code.c --model graphcodebert
 ```
 
-## 📁 Project Structure
-```
-vulnai/
-├── data/              # Data download and preprocessing
-├── src/               # Core source code
-│   ├── config.py      # Configuration
-│   ├── models.py      # Model wrappers
-│   ├── train.py       # Training logic
-│   ├── evaluate.py    # Evaluation utilities
-│   └── inference.py   # Inference interface
-├── notebooks/         # Jupyter experiments
-├── scripts/           # Training/evaluation scripts
-└── results/           # Saved models and metrics
 ```
 
 ## 🔬 Models
