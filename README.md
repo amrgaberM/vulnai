@@ -2,12 +2,21 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Medium Article](https://img.shields.io/badge/Medium-Article-black)](https://medium.com/@amrgabeerr20/building-a-multi-model-ensemble-for-code-vulnerability-detection-lessons-from-fine-tuning-2da63c7fc279)
 
 Experimental multi-model ensemble system for detecting vulnerabilities in C code using fine-tuned transformer models.
+
+> 📖 **Read the full story:** [Building a Multi-Model Ensemble for Code Vulnerability Detection](https://medium.com/@amrgabeerr20/building-a-multi-model-ensemble-for-code-vulnerability-detection-lessons-from-fine-tuning-2da63c7fc279)
 
 ## 🎯 Overview
 
 This project explores using state-of-the-art code understanding models (CodeBERT, GraphCodeBERT, CodeT5) to detect security vulnerabilities in source code. Trained on Microsoft's Devign dataset containing 21K+ labeled C functions.
+
+**Key learnings from this project:**
+- Multi-model ensemble challenges and calibration issues
+- The critical importance of data quality and proper evaluation
+- Why 66% accuracy on a real problem teaches more than 99% on toy datasets
+- Production ML is 80% engineering, 20% modeling
 
 ## 📊 Results
 
@@ -42,7 +51,7 @@ python src/train.py --model graphcodebert
 python src/train.py --model codet5
 
 # Or train all at once
-bash scripts/train_all_models.sh
+python scripts/train_all_models.py
 ```
 
 ### Inference
@@ -60,6 +69,16 @@ def get_user(user_id):
 result = detector.predict(code)
 print(f"Prediction: {result['prediction']}")
 print(f"Confidence: {result['confidence']:.2%}")
+# Output: Prediction: VULNERABLE, Confidence: 87%
+```
+
+**CLI Usage:**
+```bash
+# Analyze code string
+python -m src.inference --code "query = 'SELECT * WHERE id=' + uid"
+
+# Analyze file
+python -m src.inference --file vulnerable_code.c --model graphcodebert
 ```
 
 ## 📁 Project Structure
@@ -67,6 +86,11 @@ print(f"Confidence: {result['confidence']:.2%}")
 vulnai/
 ├── data/              # Data download and preprocessing
 ├── src/               # Core source code
+│   ├── config.py      # Configuration
+│   ├── models.py      # Model wrappers
+│   ├── train.py       # Training logic
+│   ├── evaluate.py    # Evaluation utilities
+│   └── inference.py   # Inference interface
 ├── notebooks/         # Jupyter experiments
 ├── scripts/           # Training/evaluation scripts
 └── results/           # Saved models and metrics
@@ -75,73 +99,124 @@ vulnai/
 ## 🔬 Models
 
 ### CodeBERT
-- **Architecture:** BERT pre-trained on code
+- **Architecture:** BERT pre-trained on code (6 programming languages)
 - **Parameters:** 125M
-- **Best for:** Keyword-based patterns
+- **Strength:** Keyword-based patterns (e.g., `strcpy`, `eval`)
+- **Weakness:** Misses structural vulnerabilities
 
-### GraphCodeBERT
-- **Architecture:** Graph-aware BERT (understands code structure)
+### GraphCodeBERT ⭐ (Best F1)
+- **Architecture:** Graph-aware BERT (understands data flow)
 - **Parameters:** 125M
-- **Best for:** Structural vulnerabilities (highest F1 score)
+- **Strength:** Structural vulnerabilities (loops without bounds, control flow issues)
+- **Weakness:** Slower inference due to graph construction
 
 ### CodeT5
 - **Architecture:** T5 encoder-decoder adapted for code
 - **Parameters:** 220M
-- **Best for:** Complex patterns
+- **Strength:** Larger capacity for complex patterns
+- **Weakness:** Encoder-decoder not ideal for classification tasks
 
 ## 📚 Dataset
 
-**Devign** (Microsoft Research)
-- **Size:** 21,854 C functions
-- **Source:** Real projects (QEMU, FFmpeg, Linux kernel)
+**Devign** (Microsoft Research, 2019)
+- **Size:** 21,854 C functions from real projects
+- **Source:** QEMU, FFmpeg, Linux kernel, Pidgin
 - **Labels:** Binary (vulnerable / safe)
-- **Split:** 80% train, 10% val, 10% test (zero leakage verified)
+- **Split:** 80% train, 10% val, 10% test
+- **Quality assurance:** Zero data leakage verified (aggressive deduplication)
 
-## ⚠️ Limitations
+## ⚠️ Limitations & Lessons Learned
 
-- **Not production-ready:** 66% accuracy insufficient for security-critical applications
-- **Language-specific:** Trained only on C code
-- **Context-limited:** 512 token window may miss complex vulnerabilities
-- **Interpretability:** Black-box predictions (no explanation of why code is vulnerable)
+### What Didn't Work:
 
-## 🎓 Learnings
+❌ **Ensemble failed (50% accuracy = random guessing)**
+- Root cause: Model disagreement without proper calibration
+- Learning: Ensemble methods require careful probability calibration
+- Fix needed: Platt scaling or meta-model stacking
 
-Key insights from this project:
+❌ **CodeT5 underperformed despite more parameters**
+- Root cause: Encoder-decoder architecture not suited for classification
+- Learning: Model design matters more than parameter count
 
-1. **Data quality matters more than model size** - GraphCodeBERT (125M) outperformed CodeT5 (220M)
-2. **Proper evaluation is critical** - Initial data leakage gave false 100% accuracy
-3. **Ensemble isn't magic** - Weighted voting failed due to model disagreement
-4. **Domain knowledge required** - Security tools need interpretability, not just accuracy
+❌ **Gap from production tools (80-88% accuracy)**
+- Root cause: Limited training data, no domain-specific tuning
+- Learning: Commercial tools have years of optimization and larger datasets
+
+### What Worked:
+
+✅ **Proper data preprocessing prevented inflated results**
+- Initial 100% accuracy revealed data leakage (296 overlapping samples)
+- Aggressive deduplication and different random seeds fixed it
+
+✅ **GraphCodeBERT's structural understanding proved valuable**
+- Best F1 score (64.63%) despite same parameter count as CodeBERT
+- Confirms: code structure matters for vulnerability detection
+
+✅ **Complete pipeline demonstrates production thinking**
+- Data → Training → Evaluation → Inference
+- 80% of work was engineering, not modeling
+
+## 🎓 Key Takeaways
+
+> "Production ML is 20% modeling, 80% infrastructure" — This project proved it
+
+1. **Data quality > Model architecture** - Clean, deduplicated data matters more than parameter count
+2. **The right metric matters** - Accuracy misled on imbalanced data; F1 told the truth
+3. **Ensembles aren't magic** - Require calibration and can fail spectacularly
+4. **Ship it** - Perfect is the enemy of done; 66% accuracy teaches more than endless optimization
 
 ## 🔮 Future Improvements
 
-- [ ] Graph Neural Networks for AST/CFG analysis
-- [ ] Hybrid approach combining static analysis + ML
-- [ ] Explainability (attention visualization, LIME)
+If I were to continue this project:
+
+- [ ] Fix ensemble with Platt scaling or stacking
+- [ ] Implement Graph Neural Networks for AST/CFG analysis
+- [ ] Add explainability (attention visualization, LIME)
+- [ ] Combine with static analysis tools (hybrid approach)
+- [ ] Expand to multi-language support (Python, JavaScript, Java)
 - [ ] Active learning on uncertain samples
-- [ ] Multi-language support (Python, JavaScript, Java)
+- [ ] Longer training (10 epochs instead of 3)
 
-## 📖 Citation
+## 📖 Read More
 
-If you use this code, please cite:
-```bibtex
-@misc{vulnai2026,
-  author = {Your Name},
-  title = {VulnAI: Multi-Model Code Vulnerability Detection},
-  year = {2026},
-  url = {https://github.com/yourusername/vulnai}
-}
-```
+**Full writeup on Medium:**  
+👉 [Building a Multi-Model Ensemble for Code Vulnerability Detection: Lessons from Fine-Tuning CodeBERT, GraphCodeBERT, and CodeT5](https://medium.com/@amrgabeerr20/building-a-multi-model-ensemble-for-code-vulnerability-detection-lessons-from-fine-tuning-2da63c7fc279)
+
+The article covers:
+- Why the ensemble failed and what I learned
+- Data leakage horror story (and how I fixed it)
+- Comparison with commercial tools
+- Honest discussion of when to ship vs. optimize
 
 
 ## 🙏 Acknowledgments
 
-- Microsoft Research for the Devign dataset
-- HuggingFace for model implementations
-- Kaggle for free GPU compute
+- **Microsoft Research** for the Devign dataset ([paper](https://arxiv.org/abs/1909.03496))
+- **HuggingFace** for transformer implementations
+- **Kaggle** for free T4 GPU compute (5 hours of training)
 
+## 📞 Contact
 
+- **Author:** Amr Gaber
+- **Medium:** [@amrgabeerr20](https://medium.com/@amrgabeerr20)
+
+## 🔗 Related Papers
+
+- **Devign:** [Graph Neural Networks for Vulnerability Detection](https://arxiv.org/abs/1909.03496)
+- **CodeBERT:** [CodeBERT: A Pre-Trained Model for Programming and Natural Languages](https://arxiv.org/abs/2002.08155)
+- **GraphCodeBERT:** [GraphCodeBERT: Pre-training Code Representations with Data Flow](https://arxiv.org/abs/2009.08366)
+- **CodeT5:** [CodeT5: Identifier-aware Unified Pre-trained Encoder-Decoder Models](https://arxiv.org/abs/2109.00859)
 
 ---
 
-⚠️ **Disclaimer:** This is an experimental research project. Do not use for production security scanning without extensive validation and human review.
+⚠️ **Disclaimer:** This is an experimental research project demonstrating ML methodology. Not intended for production security scanning. Always combine automated tools with human security review.
+
+---
+
+<div align="center">
+
+**If this project helped you learn about ML engineering, star it! ⭐**
+
+**Questions? Open an issue or read the [Medium article](https://medium.com/@amrgabeerr20/building-a-multi-model-ensemble-for-code-vulnerability-detection-lessons-from-fine-tuning-2da63c7fc279).**
+
+</div>
